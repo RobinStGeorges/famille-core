@@ -1,0 +1,138 @@
+/* Charte graphique commune — « Le Petit Perchoir »
+   Chaque mini-app peut surcharger --fc-primary pour avoir sa propre identité. */
+
+:root {
+  color-scheme: light dark;
+
+  --fc-bg: #f6f5f1;
+  --fc-surface: #ffffff;
+  --fc-text: #1d2421;
+  --fc-muted: #6b746f;
+  --fc-border: #e3e1d9;
+  --fc-primary: #1f7a63;
+  --fc-primary-text: #ffffff;
+  --fc-danger: #c0392b;
+  --fc-radius: 16px;
+  --fc-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 14px rgba(0, 0, 0, 0.06);
+  --fc-font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --fc-bg: #121614;
+    --fc-surface: #1b211e;
+    --fc-text: #eef1ef;
+    --fc-muted: #9aa5a0;
+    --fc-border: #2a322e;
+    --fc-primary: #3fb597;
+    --fc-primary-text: #08241c;
+    --fc-danger: #ef6c5d;
+    --fc-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --fc-bg: #121614;
+  --fc-surface: #1b211e;
+  --fc-text: #eef1ef;
+  --fc-muted: #9aa5a0;
+  --fc-border: #2a322e;
+  --fc-primary: #3fb597;
+  --fc-primary-text: #08241c;
+  --fc-danger: #ef6c5d;
+  --fc-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--fc-bg);
+  color: var(--fc-text);
+  font-family: var(--fc-font);
+  font-size: 17px;
+  line-height: 1.45;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100vh;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ---------- Composants de base ---------- */
+
+.fc-card {
+  background: var(--fc-surface);
+  border: 1px solid var(--fc-border);
+  border-radius: var(--fc-radius);
+  box-shadow: var(--fc-shadow);
+  padding: 1.1rem;
+}
+
+.fc-input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0.7rem 0.9rem;
+  font: inherit;
+  color: var(--fc-text);
+  background: var(--fc-bg);
+  border: 1.5px solid var(--fc-border);
+  border-radius: 12px;
+}
+.fc-input:focus {
+  outline: none;
+  border-color: var(--fc-primary);
+}
+
+.fc-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 52px;
+  padding: 0.7rem 1.2rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--fc-text);
+  background: var(--fc-surface);
+  border: 1.5px solid var(--fc-border);
+  border-radius: 14px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.fc-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.fc-btn-primary {
+  color: var(--fc-primary-text);
+  background: var(--fc-primary);
+  border-color: var(--fc-primary);
+}
+.fc-btn-danger {
+  color: var(--fc-danger);
+  border-color: var(--fc-danger);
+}
+.fc-btn-block {
+  width: 100%;
+}
+
+.fc-muted {
+  color: var(--fc-muted);
+}
+.fc-error {
+  color: var(--fc-danger);
+  font-size: 0.95rem;
+}

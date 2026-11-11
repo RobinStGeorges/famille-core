@@ -1,0 +1,3 @@
+node_modules/
+# NB : le dossier dist/ est volontairement versionné (voir README) :
+# les apps installent ce dépôt directement depuis Git, sans étape de compilation.
