@@ -54,8 +54,12 @@ export async function createFamily(name: string): Promise<string> {
     role: 'owner',
     joinedAt: serverTimestamp(),
   });
-  batch.set(doc(db, 'users', user.uid), { displayName, familyId: familyRef.id });
   await batch.commit();
+
+  // Le profil n'est mis à jour qu'APRÈS validation par le serveur : sinon l'appli
+  // tenterait de lire la famille avant que l'appartenance existe côté serveur
+  // (lecture refusée, et on resterait bloqué sur l'écran de création).
+  await setDoc(doc(db, 'users', user.uid), { displayName, familyId: familyRef.id });
   return familyRef.id;
 }
 
@@ -89,15 +93,15 @@ export async function joinFamily(rawCode: string): Promise<void> {
     throw new FamilleError('Ce code a expiré. Demandez-en un nouveau.');
   }
 
-  const batch = writeBatch(db);
-  batch.set(doc(db, 'families', fid, 'members', user.uid), {
+  // 1) Devenir membre (validé par le serveur grâce au code), 2) seulement ensuite
+  // renseigner le profil. Voir la remarque dans createFamily.
+  await setDoc(doc(db, 'families', fid, 'members', user.uid), {
     displayName,
     role: 'member',
     inviteCode: code,
     joinedAt: serverTimestamp(),
   });
-  batch.set(doc(db, 'users', user.uid), { displayName, familyId: fid });
-  await batch.commit();
+  await setDoc(doc(db, 'users', user.uid), { displayName, familyId: fid });
 }
 
 /** Quitte la famille (non proposé au propriétaire). */
