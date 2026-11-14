@@ -1,6 +1,6 @@
 {
   "name": "famille-core",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Socle commun du portail familial : Firebase, session, famille, thème. Aucune logique métier d'application.",
   "type": "module",
   "main": "./dist/index.js",

@@ -6,11 +6,14 @@ export {
   createFamily,
   createInvite,
   joinFamily,
+  selectFamily,
   leaveFamily,
+  deleteFamily,
   watchMembers,
   appCollection,
   type Member,
 } from './family';
+export { watchMyFamilies, type MyFamily } from './families';
 export { generateInviteCode, formatInviteCode, normalizeInviteCode } from './invite';
 export { FamilleError, toFrenchMessage } from './errors';
 export { initTheme, getThemeChoice, setThemeChoice, type ThemeChoice } from './theme';

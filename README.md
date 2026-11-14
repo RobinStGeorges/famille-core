@@ -10,7 +10,8 @@ Ce paquet ne contient aucune logique métier d'application (ni courses, ni jeux)
 | `initFamille(config)` | Initialise Firebase (Auth + Firestore avec cache hors-ligne) et démarre la session |
 | `session` | Store (compatible Svelte `$session`) : `loading`, `signedOut`, `noFamily`, `ready` |
 | `signUp`, `signIn`, `signOutUser`, `resetPassword` | Authentification |
-| `createFamily`, `createInvite`, `joinFamily`, `leaveFamily`, `watchMembers` | Espace familial |
+| `createFamily`, `createInvite`, `joinFamily`, `leaveFamily`, `deleteFamily`, `selectFamily`, `watchMembers` | Espace familial |
+| `watchMyFamilies(cb)` | Liste des familles de l'utilisateur (une personne peut en avoir plusieurs) ; `cb(familles, prêt)` |
 | `appCollection(familyId, appId, ...)` | Chemin des données d'une app : `families/{fid}/apps/{appId}/...` |
 | `toFrenchMessage(e)` | Messages d'erreur en français |
 | `theme.css`, `initTheme`, `setThemeChoice` | Charte graphique, mode clair / sombre / auto |
@@ -18,7 +19,7 @@ Ce paquet ne contient aucune logique métier d'application (ni courses, ni jeux)
 ## Utilisation dans une application
 
 ```
-npm install git+https://github.com/RobinStGeorges/famille-core.git#v0.1.0
+npm install git+https://github.com/RobinStGeorges/famille-core.git#v0.2.0
 ```
 
 ```ts
@@ -55,3 +56,12 @@ Publier une version :
 git tag v0.1.1
 git push origin main --tags
 ```
+
+## Familles multiples
+
+Une personne peut appartenir à plusieurs familles. La **famille active** est le champ `familyId` du profil
+(`users/{uid}`) : c'est lui que lisent `session` et donc toutes les applications. Choisir une autre famille
+(`selectFamily`) change ce champ ; les applications, qui ne connaissent que « la famille de la session »,
+n'ont rien à modifier. Les données de chaque famille restent séparées (`families/{id}/apps/…`).
+
+L'index `users/{uid}/memberships/{familleId}` sert uniquement à **lister** les familles d'une personne.

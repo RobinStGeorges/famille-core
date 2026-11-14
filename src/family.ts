@@ -3,6 +3,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   serverTimestamp,
   setDoc,
@@ -16,6 +17,7 @@ import { FamilleError } from './errors';
 import { generateInviteCode, normalizeInviteCode } from './invite';
 
 const INVITE_VALIDITY_DAYS = 7;
+const MAX_MEMBERS_FOR_DELETE = 200; // une suppression tient dans un seul lot atomique (500 écritures max)
 
 export interface Member {
   uid: string;
@@ -36,7 +38,26 @@ function currentDisplayName(): string {
   return currentUser().email ?? '';
 }
 
-/** Crée une famille dont l'utilisateur connecté est propriétaire. Renvoie son identifiant. */
+/** Famille actuellement choisie par l'utilisateur (celle que lisent toutes les applications). */
+function activeFamilyId(): string | null {
+  const s = getSession();
+  return s.status === 'ready' ? s.familyId : null;
+}
+
+/**
+ * Définit la famille active : c'est le champ `familyId` du profil, que toutes les applications
+ * lisent déjà. Changer de famille ne demande donc aucune modification des applications.
+ */
+async function setActiveFamily(familyId: string | null): Promise<void> {
+  const { db } = getServices();
+  const user = currentUser();
+  await setDoc(doc(db, 'users', user.uid), { displayName: currentDisplayName(), familyId });
+}
+
+/**
+ * Crée une famille dont l'utilisateur connecté est propriétaire, et la rend active.
+ * Une personne peut créer autant de familles qu'elle le souhaite.
+ */
 export async function createFamily(name: string): Promise<string> {
   const familyName = name.trim();
   if (!familyName) throw new FamilleError("Donnez un nom à votre espace familial.");
@@ -54,12 +75,13 @@ export async function createFamily(name: string): Promise<string> {
     role: 'owner',
     joinedAt: serverTimestamp(),
   });
+  // Index « mes familles » : permet de lister les familles d'une personne.
+  batch.set(doc(db, 'users', user.uid, 'memberships', familyRef.id), { joinedAt: serverTimestamp() });
   await batch.commit();
 
-  // Le profil n'est mis à jour qu'APRÈS validation par le serveur : sinon l'appli
-  // tenterait de lire la famille avant que l'appartenance existe côté serveur
-  // (lecture refusée, et on resterait bloqué sur l'écran de création).
-  await setDoc(doc(db, 'users', user.uid), { displayName, familyId: familyRef.id });
+  // La famille n'est rendue active qu'APRÈS validation par le serveur (sinon l'appli tenterait
+  // de la lire avant que l'appartenance existe côté serveur : lecture refusée).
+  await setActiveFamily(familyRef.id);
   return familyRef.id;
 }
 
@@ -77,7 +99,7 @@ export async function createInvite(familyId: string): Promise<{ code: string; ex
   return { code, expiresAt: expires };
 }
 
-/** Rejoint une famille existante grâce à un code d'invitation. */
+/** Rejoint une famille existante grâce à un code d'invitation, et la rend active. */
 export async function joinFamily(rawCode: string): Promise<void> {
   const code = normalizeInviteCode(rawCode);
   if (code.length < 6) throw new FamilleError("Ce code d'invitation n'est pas valide.");
@@ -92,26 +114,67 @@ export async function joinFamily(rawCode: string): Promise<void> {
   if (expiresAt.toMillis() < Date.now()) {
     throw new FamilleError('Ce code a expiré. Demandez-en un nouveau.');
   }
+  const already = await getDoc(doc(db, 'families', fid, 'members', user.uid));
+  if (already.exists()) throw new FamilleError('Vous faites déjà partie de cette famille.');
 
-  // 1) Devenir membre (validé par le serveur grâce au code), 2) seulement ensuite
-  // renseigner le profil. Voir la remarque dans createFamily.
-  await setDoc(doc(db, 'families', fid, 'members', user.uid), {
+  const batch = writeBatch(db);
+  batch.set(doc(db, 'families', fid, 'members', user.uid), {
     displayName,
     role: 'member',
     inviteCode: code,
     joinedAt: serverTimestamp(),
   });
-  await setDoc(doc(db, 'users', user.uid), { displayName, familyId: fid });
+  batch.set(doc(db, 'users', user.uid, 'memberships', fid), { joinedAt: serverTimestamp() });
+  await batch.commit();
+  await setActiveFamily(fid);
 }
 
-/** Quitte la famille (non proposé au propriétaire). */
+/** Choisit la famille avec laquelle on utilise les applications. */
+export async function selectFamily(familyId: string): Promise<void> {
+  const { db } = getServices();
+  const user = currentUser();
+  const member = await getDoc(doc(db, 'families', familyId, 'members', user.uid));
+  if (!member.exists()) throw new FamilleError('Vous ne faites plus partie de cette famille.');
+  await setActiveFamily(familyId);
+}
+
+/** Quitte une famille (non proposé au propriétaire, qui peut la supprimer). */
 export async function leaveFamily(familyId: string): Promise<void> {
   const { db } = getServices();
   const user = currentUser();
+  const wasActive = activeFamilyId() === familyId;
   const batch = writeBatch(db);
   batch.delete(doc(db, 'families', familyId, 'members', user.uid));
-  batch.set(doc(db, 'users', user.uid), { displayName: currentDisplayName(), familyId: null });
+  batch.delete(doc(db, 'users', user.uid, 'memberships', familyId));
   await batch.commit();
+  if (wasActive) await setActiveFamily(null);
+}
+
+/**
+ * Supprime une famille (propriétaire uniquement) : elle est marquée « supprimée », tous ses membres
+ * perdent l'accès et disparaissent de leur liste. Les données des applications deviennent
+ * inaccessibles pour tout le monde ; elles peuvent ensuite être purgées avec l'outil d'administration
+ * (voir le dépôt famille-infra) : le navigateur ne peut pas parcourir les données de toutes les apps.
+ */
+export async function deleteFamily(familyId: string): Promise<void> {
+  const { db } = getServices();
+  const user = currentUser();
+  const wasActive = activeFamilyId() === familyId;
+
+  const members = await getDocs(collection(db, 'families', familyId, 'members'));
+  if (members.size > MAX_MEMBERS_FOR_DELETE) throw new FamilleError('Cette famille compte trop de membres pour être supprimée ici.');
+
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'families', familyId), { deletedAt: serverTimestamp() });
+  members.docs.forEach((m) => {
+    batch.delete(m.ref);
+    batch.delete(doc(db, 'users', m.id, 'memberships', familyId));
+  });
+  // le propriétaire figure normalement parmi les membres ; on s'assure de retirer aussi son index
+  batch.delete(doc(db, 'users', user.uid, 'memberships', familyId));
+  await batch.commit();
+
+  if (wasActive) await setActiveFamily(null);
 }
 
 /** Écoute la liste des membres d'une famille. Renvoie la fonction d'arrêt. */
@@ -152,3 +215,4 @@ export function appCollection(
   const { db } = getServices();
   return collection(db, 'families', familyId, 'apps', appId, ...segments);
 }
+
